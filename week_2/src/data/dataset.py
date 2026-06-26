@@ -41,12 +41,67 @@ class BTCVSliceDataset(Dataset):
 
     def __init__(self, cases, organ_id, image_dir, label_dir, image_size=1024):
         self.samples = []
-        # TODO: implement as described above
-        pass
+
+        image_dir = Path(image_dir)
+        label_dir = Path(label_dir)
+
+        for case in cases:
+            img_path = image_dir / f"{case}.nii"
+
+            label_case = case.replace("img", "label", 1)
+            label_path = label_dir / f"{label_case}.nii"
+
+            img_vol, _, _ = load_volume(img_path)
+            label_vol, _, _ = load_volume(label_path)
+
+            img_vol_u8 = apply_hu_window(
+                img_vol,
+                lo=-150,
+                hi=250,
+                as_uint8=True,
+            )
+
+            for z in range(img_vol_u8.shape[2]):
+                label_slice = label_vol[:, :, z]
+
+                gt = (label_slice == organ_id).astype(np.uint8)
+
+                if gt.sum() == 0:
+                    continue
+
+                img_slice = img_vol_u8[:, :, z]
+
+                img_rgb = np.repeat(img_slice[..., None], 3, axis=2)
+
+                img_resized = Image.fromarray(img_rgb).resize(
+                    (image_size, image_size),
+                    resample=Image.BILINEAR,
+                )
+                img_resized = np.array(img_resized, dtype=np.uint8)
+
+                gt_resized = Image.fromarray(gt).resize(
+                    (image_size, image_size),
+                    resample=Image.NEAREST,
+                )
+                gt_resized = np.array(gt_resized, dtype=np.uint8)
+
+                box = bbox_from_mask(gt_resized)
+
+                if box is None:
+                    continue
+
+                box = np.array(box, dtype=np.float32)
+
+                self.samples.append((img_resized, gt_resized, box))
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        # TODO: unpack self.samples[idx] and return tensors as specified above
-        pass
+        img_array, gt_array, box_array = self.samples[idx]
+
+        img_tensor = torch.tensor(img_array, dtype=torch.float32) / 255.0
+        gt_tensor = torch.tensor(gt_array, dtype=torch.float32)
+        box_tensor = torch.tensor(box_array, dtype=torch.float32)
+
+        return img_tensor, gt_tensor, box_tensor
