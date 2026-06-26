@@ -23,4 +23,22 @@ def save_overlay_gif(vol_u8, pred3d, out_path, gt3d=None):
         out_path (str | Path):      Destination .gif path.
         gt3d     (np.ndarray|None): Ground-truth mask same shape, or None.
     """
-    pass
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    frames = []
+
+    for z in range(vol_u8.shape[2]):
+        slice2d = vol_u8[:, :, z]
+        rgb = np.repeat(slice2d[..., None], 3, axis=2).astype(np.float32)
+
+        if gt3d is not None:
+            gt_mask = gt3d[:, :, z].astype(bool)
+            rgb[gt_mask] = 0.5 * rgb[gt_mask] + 0.5 * np.array([60, 220, 60])
+
+        pred_mask = pred3d[:, :, z].astype(bool)
+        rgb[pred_mask] = 0.5 * rgb[pred_mask] + 0.5 * np.array([220, 60, 60])
+
+        frames.append(rgb.astype(np.uint8))
+
+    imageio.mimsave(out_path, frames, duration=0.08)
