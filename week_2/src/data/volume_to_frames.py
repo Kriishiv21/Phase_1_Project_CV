@@ -25,7 +25,22 @@ def write_frames_png(nifti_path, out_dir):
     Returns:
         int: Number of PNGs written (equals the Z depth of the volume).
     """
-    pass
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    vol, affine, spacing = load_volume(nifti_path)
+    vol_u8 = apply_hu_window(vol, lo=-150, hi=250, as_uint8=True)
+
+    depth = vol_u8.shape[2]
+
+    for z in range(depth):
+        slice2d = vol_u8[:, :, z]
+        slice_rgb = to_rgb(slice2d)
+
+        img = Image.fromarray(slice_rgb)
+        img.save(out_dir / f"{z:05d}.png")
+
+    return depth
 
 
 def frames_to_arrays(frames_dir):
@@ -41,4 +56,16 @@ def frames_to_arrays(frames_dir):
     Returns:
         np.ndarray: uint8 array of shape (Z, H, W, 3).
     """
-    pass
+    frames_dir = Path(frames_dir)
+
+    frame_paths = sorted(frames_dir.glob("*.png"))
+
+    frames = []
+
+    for path in frame_paths:
+        img = Image.open(path).convert("RGB")
+        arr = np.array(img, dtype=np.uint8)
+        frames.append(arr)
+
+    return np.stack(frames, axis=0)
+    
